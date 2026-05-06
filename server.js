@@ -1,17 +1,39 @@
+import { readFileSync } from 'fs';
 import express from 'express';
-import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 import admin from 'firebase-admin';
-import { createRequire } from 'module';
 import 'dotenv/config';
-import { readFileSync } from 'fs';
-const require = createRequire(import.meta.url);
-const serviceAccount = JSON.parse(
-  readFileSync('/etc/secrets/serviceAccount.json', 'utf8')
-);
-serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
 
+const app  = express();
+const PORT = process.env.PORT || 3001;
 
+// ── CORS ──
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', 'https://simai-f8efb.web.app');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
+app.use(express.json());
+
+// ── ServiceAccount 読み込み（ファイル優先、なければ環境変数）──
+let serviceAccount;
+try {
+  serviceAccount = JSON.parse(readFileSync('/etc/secrets/serviceAccount.json', 'utf8'));
+  console.log('✅ ServiceAccount: シークレットファイルから読み込み成功');
+} catch {
+  console.log('⚠️ シークレットファイルなし → 環境変数から読み込み');
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  serviceAccount = JSON.parse(raw);
+  serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+}
+console.log('🔍 project_id:', serviceAccount.project_id);
+console.log('🔍 client_email:', serviceAccount.client_email);
+
+// ── Anthropic ──
+console.log('🔍 ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY ? '✅ あり' : '❌ なし');
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
  
 const app  = express();
 const PORT = process.env.PORT || 3001;
