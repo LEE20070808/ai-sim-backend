@@ -1,5 +1,4 @@
 import express from 'express';
-import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 import admin from 'firebase-admin';
 import { createRequire } from 'module';
@@ -8,18 +7,17 @@ import 'dotenv/config';
 const require = createRequire(import.meta.url);
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 
-const app  = express();
-const PORT = process.env.PORT || 3001;
-
-app.use(cors({ origin: '*' }));
-app.use(express.json());
-
-// ── Firebase Admin ──
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+// ✅ 手動CORSミドルウェア（Railway対応）
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', 'https://simai-f8efb.web.app');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end(); // プリフライトはここで終了
+  }
+  next();
 });
-const db = admin.firestore();
-
+app.use(express.json());
 // ── Anthropic クライアント ──
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
