@@ -11,17 +11,7 @@ const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-// ✅ CORSを明示的に設定（OPTIONSも通す）
-const corsOptions = {
-  origin: 'https://simai-f8efb.web.app',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-};
-
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // ← OPTIONSプリフライトを明示的に処理
-// OPTIONSリクエストに明示的に応答
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // ── Firebase Admin ──
@@ -115,7 +105,6 @@ app.post('/api/chat', verifyAuth, async (req, res) => {
   }
 
   // SSE ヘッダー
-  res.setHeader('Access-Control-Allow-Origin', '*'); 
   res.setHeader('Content-Type',  'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection',    'keep-alive');
