@@ -29,9 +29,21 @@ app.options('*', cors());
 app.use(express.json());
  
 // ── Firebase Admin ──
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+// ── Firebase Admin ──
+try {
+  console.log('🔍 serviceAccount keys:', Object.keys(serviceAccount));
+  console.log('🔍 project_id:', serviceAccount.project_id);
+  console.log('🔍 client_email:', serviceAccount.client_email);
+  console.log('🔍 private_key 先頭:', serviceAccount.private_key?.substring(0, 50));
+  console.log('🔍 private_key 末尾:', serviceAccount.private_key?.slice(-50));
+
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+  console.log('✅ Firebase Admin 初期化成功');
+} catch (e) {
+  console.error('❌ Firebase Admin 初期化失敗:', e.message);
+}
 const db = admin.firestore();
  
 // ── Anthropic クライアント ──
