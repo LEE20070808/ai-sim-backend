@@ -1,50 +1,39 @@
-import { readFileSync } from 'fs';
 import express from 'express';
+import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 import admin from 'firebase-admin';
+import { createRequire } from 'module';
 import 'dotenv/config';
+
+const require = createRequire(import.meta.url);
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+if (serviceAccount.private_key) {
+  serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+}
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-// ── CORS ──
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', 'https://simai-f8efb.web.app');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') return res.status(204).end();
-  next();
-});
+app.use(cors({ origin: '*' }));
 app.use(express.json());
-
-// ── ServiceAccount 読み込み ──
-let serviceAccount;
-try {
-  serviceAccount = JSON.parse(readFileSync('/etc/secrets/serviceAccount.json', 'utf8'));
-  console.log('✅ ServiceAccount: シークレットファイルから読み込み成功');
-} catch {
-  console.log('⚠️ シークレットファイルなし → 環境変数から読み込み');
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-  serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-}
-console.log('🔍 project_id:', serviceAccount.project_id);
-console.log('🔍 client_email:', serviceAccount.client_email);
 
 // ── Firebase Admin ──
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 const db = admin.firestore();
-console.log('✅ Firebase Admin 初期化成功');
 
-// ── Anthropic ──
-console.log('🔍 ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY ? '✅ あり' : '❌ なし');
+// ── Anthropic クライアント ──
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ── モデル設定 (API料金 × 1.22) ──
 const MODEL_CONFIG = {
   'claude-sonnet-4-6': { provider: 'anthropic', apiModel: 'claude-sonnet-4-6', inputPer1M: 3.66,  outputPer1M: 18.30 },
-  'claude-opus-4-6':   { provider: 'anthropic', apiModel: 'claude-opus-4-6',   inputPer1M: 18.36, outputPer1M: 91.68 },
+  'claude-opus-4-6':   { provider: 'anthropic', apiModel: 'claude-opus-4-6',             inputPer1M: 18.36, outputPer1M: 91.68 },
+  // GPT・Geminiは追加APIキー取得後に有効化
+  // 'gpt-5':          { provider: 'openai',    apiModel: 'gpt-4o',           inputPer1M: 24.40, outputPer1M: 97.60 },
+  // 'gpt-4-1':        { provider: 'openai',    apiModel: 'gpt-4-turbo',      inputPer1M: 2.44,  outputPer1M: 9.76  },
+  // 'gemini-3-2':     { provider: 'google',    apiModel: 'gemini-1.5-pro',   inputPer1M: 1.95,  outputPer1M: 7.80  },
 };
 
 // ── Firebase ID トークン検証 ──
@@ -128,6 +117,7 @@ app.post('/api/chat', verifyAuth, async (req, res) => {
   let outputTokens = 0;
 
   try {
+    // ── Anthropic (Claude) ──
     if (cfg.provider === 'anthropic') {
       const stream = await anthropic.messages.stream({
         model:      cfg.apiModel,
@@ -135,19 +125,24 @@ app.post('/api/chat', verifyAuth, async (req, res) => {
         messages:   messages.map(m => ({ role: m.role, content: m.content })),
       });
 
+      // 文字が来るたびにクライアントへ送信
       for await (const event of stream) {
         if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
           sseWrite(res, { type: 'delta', text: event.delta.text });
         }
       }
 
+      // 会話終了後に実際のトークン数を取得
       const finalMsg = await stream.finalMessage();
       inputTokens  = finalMsg.usage.input_tokens;
       outputTokens = finalMsg.usage.output_tokens;
     }
 
+    // ── コスト計算・Firestore保存 ──
     const costUSD = calcCost(modelId, inputTokens, outputTokens);
     await recordUsage(req.uid, modelId, inputTokens, outputTokens, costUSD);
+
+    // 会話終了イベント: 実トークン数とコストをフロントへ送信
     sseWrite(res, { type: 'done', inputTokens, outputTokens, costUSD });
 
   } catch (err) {
