@@ -18,9 +18,6 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
-
-app.use(express.json());
-
 // OPTIONSリクエストに明示的に応答
 app.use(express.json());
 
@@ -115,6 +112,7 @@ app.post('/api/chat', verifyAuth, async (req, res) => {
   }
 
   // SSE ヘッダー
+  res.setHeader('Access-Control-Allow-Origin', '*'); 
   res.setHeader('Content-Type',  'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection',    'keep-alive');
