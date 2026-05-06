@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 import admin from 'firebase-admin';
 import { createRequire } from 'module';
@@ -10,14 +11,16 @@ const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-// 既存のcors設定を全部削除して、これだけにする
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
-  next();
-});
+// ✅ CORSを明示的に設定（OPTIONSも通す）
+const corsOptions = {
+  origin: 'https://simai-f8efb.web.app',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // ← OPTIONSプリフライトを明示的に処理
 // OPTIONSリクエストに明示的に応答
 app.use(express.json());
 
