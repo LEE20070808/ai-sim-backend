@@ -13,9 +13,13 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors({
   origin: ['https://simai-f8efb.web.app', 'http://localhost:3001'],
-  methods: ['GET', 'POST'],
+  methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 }));
+
+// OPTIONSリクエストに明示的に応答
+app.options('*', cors());
 app.use(express.json());
 
 // ── Firebase Admin ──
