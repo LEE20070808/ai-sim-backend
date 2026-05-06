@@ -7,9 +7,9 @@ import 'dotenv/config';
  
 const require = createRequire(import.meta.url);
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-if (serviceAccount.private_key) {
-  serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-}
+serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+
+
  
 const app  = express();
 const PORT = process.env.PORT || 3001;
