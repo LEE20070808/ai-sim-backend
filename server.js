@@ -17,25 +17,21 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 
-// ── ServiceAccount 読み込み ──
-let serviceAccount;
+// ── ServiceAccount & Firebase Admin ──
+process.env.GOOGLE_APPLICATION_CREDENTIALS = '/etc/secrets/serviceAccount.json';
+
+let projectId;
 try {
-  serviceAccount = JSON.parse(readFileSync('/etc/secrets/serviceAccount.json', 'utf8'));
-  console.log('✅ ServiceAccount: シークレットファイルから読み込み成功');
-} catch {
-  console.log('⚠️ シークレットファイルなし → 環境変数から読み込み');
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  const raw = readFileSync('/etc/secrets/serviceAccount.json', 'utf8');
+  projectId = JSON.parse(raw).project_id;
+  console.log('✅ ServiceAccount ファイル確認 project_id:', projectId);
+} catch (e) {
+  console.error('❌ ServiceAccount ファイル読み込み失敗:', e.message);
 }
 
-// private_keyの改行コードを確実に修正
-serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-console.log('🔍 project_id:', serviceAccount.project_id);
-console.log('🔍 private_key 先頭:', serviceAccount.private_key.substring(0, 40));
-
-// ── Firebase Admin ──
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  projectId: serviceAccount.project_id,
+  credential: admin.credential.applicationDefault(),
+  projectId,
 });
 const db = admin.firestore();
 console.log('✅ Firebase Admin 初期化成功');
