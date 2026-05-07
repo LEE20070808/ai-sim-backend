@@ -18,19 +18,22 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 // ── ServiceAccount & Firebase Admin ──
-process.env.GOOGLE_APPLICATION_CREDENTIALS = '/etc/secrets/serviceAccount.json';
-
-let projectId;
+let projectId, clientEmail, privateKey;
 try {
   const raw = readFileSync('/etc/secrets/serviceAccount.json', 'utf8');
-  projectId = JSON.parse(raw).project_id;
-  console.log('✅ ServiceAccount ファイル確認 project_id:', projectId);
+  const parsed = JSON.parse(raw);
+  projectId   = parsed.project_id;
+  clientEmail = parsed.client_email;
+  privateKey  = parsed.private_key.replace(/\\n/g, '\n');
+  console.log('✅ ServiceAccount 読み込み成功 project_id:', projectId);
+  console.log('🔍 privateKey先頭:', privateKey.substring(0, 40));
 } catch (e) {
-  console.error('❌ ServiceAccount ファイル読み込み失敗:', e.message);
+  console.error('❌ ServiceAccount 読み込み失敗:', e.message);
+  process.exit(1); // 失敗したら起動しない
 }
 
 admin.initializeApp({
-  credential: admin.credential.applicationDefault(),
+  credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
   projectId,
 });
 const db = admin.firestore();
