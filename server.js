@@ -39,6 +39,24 @@ admin.initializeApp({
 const db = admin.firestore();
 console.log('✅ Firebase Admin 初期化成功');
 
+// ── Firestore接続テスト（起動2秒後）──
+setTimeout(async () => {
+  try {
+    const token = await admin.credential.cert({ projectId, clientEmail, privateKey }).getAccessToken();
+    console.log('✅ アクセストークン取得成功:', token.access_token.substring(0, 30) + '...');
+  } catch (e) {
+    console.error('❌ アクセストークン取得失敗:', e.message);
+  }
+
+  try {
+    await db.collection('_health').limit(1).get();
+    console.log('✅ Firestore接続テスト成功');
+  } catch (e) {
+    console.error('❌ Firestore接続テスト失敗 code:', e.code);
+    console.error('❌ Firestore接続テスト失敗 message:', e.message.substring(0, 150));
+  }
+}, 2000);
+
 // ── Anthropic ──
 console.log('🔍 ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY ? '✅ あり' : '❌ なし');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
