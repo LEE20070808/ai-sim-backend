@@ -139,11 +139,20 @@ app.post('/api/chat', verifyAuth, async (req, res) => {
     }
 
     // ── コスト計算・Firestore保存 ──
+
     const costUSD = calcCost(modelId, inputTokens, outputTokens);
-    await recordUsage(req.uid, modelId, inputTokens, outputTokens, costUSD);
+    try {
+      await recordUsage(req.uid, modelId, inputTokens, outputTokens, costUSD);
+      console.log('✅ Firestore記録成功');
+    } catch (fsErr) {
+      console.error('⚠️ Firestore記録失敗（チャットは継続）:', fsErr.message);
+    }
+    sseWrite(res, { type: 'done', inputTokens, outputTokens, costUSD });
+    //const costUSD = calcCost(modelId, inputTokens, outputTokens);
+    //await recordUsage(req.uid, modelId, inputTokens, outputTokens, costUSD);
 
     // 会話終了イベント: 実トークン数とコストをフロントへ送信
-    sseWrite(res, { type: 'done', inputTokens, outputTokens, costUSD });
+    //sseWrite(res, { type: 'done', inputTokens, outputTokens, costUSD });
 
   } catch (err) {
     console.error('[/api/chat error]', err.message);
