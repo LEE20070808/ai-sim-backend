@@ -125,63 +125,65 @@ function sseWrite(res, data) {
 }
 
 // ══════════════════════════════════════════════════════
-//  POST /api/chat  — ストリーミングチャット
+//  POST /api/chats — 新しい会話を作成
 // ══════════════════════════════════════════════════════
-app.post('/api/chat', verifyAuth, async (req, res) => {
-  const { messages, model: modelId } = req.body;
-
-  if (!messages || !Array.isArray(messages) || messages.length === 0) {
-    return res.status(400).json({ error: 'messagesが必要です' });
-  }
-  const cfg = MODEL_CONFIG[modelId];
-  if (!cfg) {
-    return res.status(400).json({ error: `未対応のモデル: ${modelId}` });
-  }
-
-  res.setHeader('Content-Type',  'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection',    'keep-alive');
-  res.flushHeaders();
-
-  let inputTokens  = 0;
-  let outputTokens = 0;
-
+app.post('/api/chats', verifyAuth, async (req, res) => {
   try {
-    if (cfg.provider === 'anthropic') {
-      const stream = await anthropic.messages.stream({
-        model:      cfg.apiModel,
-        max_tokens: 4096,
-        messages:   messages.map(m => ({ role: m.role, content: m.content })),
-      });
-
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-          sseWrite(res, { type: 'delta', text: event.delta.text });
-        }
-      }
-
-      const finalMsg = await stream.finalMessage();
-      inputTokens  = finalMsg.usage.input_tokens;
-      outputTokens = finalMsg.usage.output_tokens;
-    }
-
-    const costUSD = calcCost(modelId, inputTokens, outputTokens);
-
-    // Firestore記録（失敗してもチャットは継続）
-    try {
-      await recordUsage(req.uid, modelId, inputTokens, outputTokens, costUSD);
-      console.log('✅ Firestore記録成功 uid:', req.uid);
-    } catch (fsErr) {
-      console.error('⚠️ Firestore記録失敗（チャットは継続）:', fsErr.message);
-    }
-
-    sseWrite(res, { type: 'done', inputTokens, outputTokens, costUSD });
-
+    const { title, model, messages } = req.body;
+    const now = new Date().toISOString();
+    const ref = await db.collection('chats').add({
+      uid: req.uid,
+      title: title || '新しい会話',
+      model: model || 'claude-sonnet-4-6',
+      messages: messages || [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    res.json({ chatId: ref.id });
   } catch (err) {
-    console.error('[/api/chat error]', err.message);
-    sseWrite(res, { type: 'error', message: err.message });
-  } finally {
-    res.end();
+    console.error('[/api/chats POST error]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════
+//  PATCH /api/chats/:id — 会話を更新（メッセージ保存）
+// ══════════════════════════════════════════════════════
+app.patch('/api/chats/:id', verifyAuth, async (req, res) => {
+  try {
+    const { title, messages, model } = req.body;
+    const ref = db.collection('chats').doc(req.params.id);
+    const snap = await ref.get();
+    if (!snap.exists || snap.data().uid !== req.uid) {
+      return res.status(404).json({ error: '会話が見つかりません' });
+    }
+    const update = { updatedAt: new Date().toISOString() };
+    if (title)    update.title    = title;
+    if (messages) update.messages = messages;
+    if (model)    update.model    = model;
+    await ref.update(update);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[/api/chats PATCH error]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════
+//  GET /api/chats — 会話一覧を取得
+// ══════════════════════════════════════════════════════
+app.get('/api/chats', verifyAuth, async (req, res) => {
+  try {
+    const snap = await db.collection('chats')
+      .where('uid', '==', req.uid)
+      .orderBy('updatedAt', 'desc')
+      .limit(50)
+      .get();
+    const chats = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ chats });
+  } catch (err) {
+    console.error('[/api/chats GET error]', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
